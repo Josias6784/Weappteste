@@ -1116,10 +1116,10 @@ setTimeout(()=>{
   
 function hideAppLoader(){
   const l = document.getElementById('appLoader');
-  if(!l) return;
+  if(!l || l.style.display === 'none') return;
   l.classList.add('hide');
   setTimeout(()=>{ l.style.display='none'; }, 500);
-}
+  }
 
 /* ── CART (única coisa em localStorage) ── */
 function loadCart(){try{const d=localStorage.getItem('_cart');if(d)S.cart=JSON.parse(d)}catch(e){}}
