@@ -1210,38 +1210,55 @@ async function cleanupOldOrders(){
 }
 
 async function sbLoad(){
+  console.log('[sbLoad] início');
   try{
     await cleanupOldOrders();
+    console.log('[sbLoad] cleanup OK');
     const [cfg,cats,prods,pays,mbs,ords]=await Promise.all([
       loadConfig(),loadCategories(),loadProducts(),loadPayments(),loadMotoboys(),loadOrders()
     ]);
-    if(!cfg){toast('❌ Configuração da loja não encontrada. Rode o SQL de setup.');return;}
+    console.log('[sbLoad] dados carregados:',{cfg:!!cfg,cats:cats.length,prods:prods.length,ords:ords.length});
+    if(!cfg){
+      console.warn('[sbLoad] config ausente — usando padrões');
+      toast('⚠️ Configuração não encontrada no banco');
+    }
+
     S.store={
-      name:cfg.name||'',desc:cfg.description||'',logo:cfg.logo||'',heroBanner:cfg.hero_banner||'',
-      closedMessage:cfg.closed_message||'',wa:cfg.wa||'',addr:cfg.addr||'',phone:cfg.phone||'',
-      minOrder:+(cfg.min_order||0),deliveryFee:+(cfg.delivery_fee||0),prepDefault:cfg.prep_default||30,
-      checkoutNotice:cfg.checkout_notice||'',bannerImages:cfg.banner_images||[],
-      schedule:(cfg.schedule&&cfg.schedule.length)?cfg.schedule:defaultSchedule(),
-      loadingMessage:cfg.loading_message||'Carregando...'
+      name:(cfg&&cfg.name)||'Minha Loja',
+      desc:(cfg&&cfg.description)||'',
+      logo:(cfg&&cfg.logo)||'',
+      heroBanner:(cfg&&cfg.hero_banner)||'',
+      closedMessage:(cfg&&cfg.closed_message)||'',
+      wa:(cfg&&cfg.wa)||'',
+      addr:(cfg&&cfg.addr)||'',
+      phone:(cfg&&cfg.phone)||'',
+      minOrder:+((cfg&&cfg.min_order)||0),
+      deliveryFee:+((cfg&&cfg.delivery_fee)||0),
+      prepDefault:(cfg&&cfg.prep_default)||30,
+      checkoutNotice:(cfg&&cfg.checkout_notice)||'',
+      bannerImages:(cfg&&cfg.banner_images)||[],
+      schedule:(cfg&&cfg.schedule&&cfg.schedule.length)?cfg.schedule:defaultSchedule(),
+      loadingMessage:(cfg&&cfg.loading_message)||'Carregando...'
     };
-    // Atualiza texto do loader com valor fresco do DB + sincroniza cache
+
     const _lt = document.getElementById('loaderText');
     if(_lt) _lt.textContent = S.store.loadingMessage || 'Carregando...';
     try{ localStorage.setItem('_loading_msg', S.store.loadingMessage || 'Carregando...'); }catch(e){}
 
-    S.waTemplate=cfg.wa_template||DEF_TMPL;
-    S.paletteId=cfg.palette_id||0;
-    S.fontFamily=cfg.font_family||'inter';
-    S.customColor=cfg.custom_color||null;
-    S.orderN=cfg.order_counter||100;
-    S.stockWarnYellow=cfg.stock_warn_yellow||5;
-    S.stockWarnRed=cfg.stock_warn_red||2;
-    S.showCatGrid=cfg.show_cat_grid!==false;
-    S.onlineMode=cfg.online_mode||'auto';
-    S.cardFeeDebit=+(cfg.card_fee_debit||0);
-    S.cardFeeCredit=+(cfg.card_fee_credit||0);
-    S.kanbanStages=(cfg.kanban_stages&&cfg.kanban_stages.length)?cfg.kanban_stages:JSON.parse(JSON.stringify(DEFAULT_STAGES));
-    const ato=cfg.admin_tab_order||{};
+    S.waTemplate=(cfg&&cfg.wa_template)||DEF_TMPL;
+    S.paletteId=(cfg&&cfg.palette_id)||0;
+    S.fontFamily=(cfg&&cfg.font_family)||'inter';
+    S.customColor=(cfg&&cfg.custom_color)||null;
+    S.orderN=(cfg&&cfg.order_counter)||100;
+    S.stockWarnYellow=(cfg&&cfg.stock_warn_yellow)||5;
+    S.stockWarnRed=(cfg&&cfg.stock_warn_red)||2;
+    S.showCatGrid=!cfg||cfg.show_cat_grid!==false;
+    S.onlineMode=(cfg&&cfg.online_mode)||'auto';
+    S.cardFeeDebit=+((cfg&&cfg.card_fee_debit)||0);
+    S.cardFeeCredit=+((cfg&&cfg.card_fee_credit)||0);
+    S.kanbanStages=(cfg&&cfg.kanban_stages&&cfg.kanban_stages.length)?cfg.kanban_stages:JSON.parse(JSON.stringify(DEFAULT_STAGES));
+
+    const ato=(cfg&&cfg.admin_tab_order)||{};
     S.adminTabOrder={
       store:Array.isArray(ato.store)?ato.store:DEFAULT_TAB_ORDER.store.slice(),
       custom:Array.isArray(ato.custom)?ato.custom:DEFAULT_TAB_ORDER.custom.slice()
@@ -1264,16 +1281,22 @@ async function sbLoad(){
     applyFont(S.fontFamily);
     loadCart();
     S.cart=S.cart.filter(ci=>S.products.find(p=>p.id===ci.id));
-  }catch(e){console.error('sbLoad:',e);toast('❌ '+e.message);}
-  _activar('pgStore');
-  renderStore();
-  updateStoreOpenSwitchUI();
-  subscribeToOrders();
-  // Esconde o loader com tempo mínimo total de 1.5s
-  const _elapsed = Date.now() - _loaderStartTime;
-  const _remaining = Math.max(0, 1500 - _elapsed);
-  setTimeout(hideAppLoader, _remaining);
-}
+    console.log('[sbLoad] estado montado');
+  }catch(e){
+    console.error('[sbLoad] ERRO:',e);
+    toast('❌ '+e.message);
+  }finally{
+    console.log('[sbLoad] finally — escondendo loader');
+    try{_activar('pgStore');}catch(e){console.error('activar',e);}
+    try{renderStore();}catch(e){console.error('renderStore',e);}
+    try{updateStoreOpenSwitchUI();}catch(e){console.error('switchUI',e);}
+    try{subscribeToOrders();}catch(e){console.error('subscribe',e);}
+    const _elapsed = Date.now() - _loaderStartTime;
+    const _remaining = Math.max(0, 1500 - _elapsed);
+    setTimeout(hideAppLoader, _remaining);
+  }
+  }
+  
 
 async function sbSave(){
   try{
