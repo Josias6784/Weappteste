@@ -515,9 +515,21 @@ input[type=color]{border:2px solid var(--border);border-radius:12px;padding:3px;
 .json-option-title{font-size:13px;font-weight:800;margin-bottom:2px;color:var(--dark)}
 .json-option.active .json-option-title{color:var(--primary-dark)}
 .json-model-box{background:#1A1A1A;color:#E8E8E8;border-radius:12px;padding:14px;font-family:'Courier New',monospace;font-size:11px;line-height:1.5;white-space:pre;overflow-x:auto;max-height:300px;overflow-y:auto;margin-bottom:14px}
+
+/* ── Loader de entrada ── */
+#appLoader{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;transition:opacity .45s ease}
+#appLoader.hide{opacity:0;pointer-events:none}
+.loader-spinner{width:60px;height:60px;border-radius:50%;border:4px solid var(--border);border-top-color:var(--primary);animation:appSpin .8s linear infinite}
+@keyframes appSpin{to{transform:rotate(360deg)}}
+.loader-text{font-size:15px;font-weight:600;color:var(--gray);text-align:center;padding:0 24px;line-height:1.5;max-width:320px}
 </style>
 </head>
 <body>
+
+<div id="appLoader">
+  <div class="loader-spinner"></div>
+  <div class="loader-text" id="loaderText">Carregando...</div>
+</div>
 
 <header>
   <div class="hdr-top">
@@ -791,6 +803,15 @@ input[type=color]{border:2px solid var(--border);border-radius:12px;padding:3px;
           <p style="font-size:12px;color:var(--gray);margin-bottom:12px">Escolha a fonte que será aplicada em toda a loja:</p>
           <div class="font-grid" id="fontGrid"></div>
         </div>
+        <div class="sec-card">
+          <div class="sec-ttl">⏳ Tela de carregamento</div>
+          <p style="font-size:12px;color:var(--gray);margin-bottom:12px;line-height:1.6">Mensagem exibida abaixo do spinner quando o app abre ou é recarregado.</p>
+          <div class="fg">
+            <label class="fl">Mensagem de carregamento</label>
+            <input class="fi" id="sLoadingMsg" placeholder="Carregando..." maxlength="80"/>
+          </div>
+          <button class="btn-primary" onclick="saveLoadingMessage()">💾 Salvar mensagem</button>
+        </div>
         <button class="btn-primary" onclick="saveDesign()">💾 Salvar aparência</button>
       </div>
 
@@ -971,8 +992,8 @@ input[type=color]{border:2px solid var(--border);border-radius:12px;padding:3px;
 /* ══════════════════════════════════════════════════════════
    SUPABASE — substitua pelos valores do SEU projeto
    ══════════════════════════════════════════════════════════ */
-const SUPABASE_URL = 'https://gmxefiznzevvaeuypbuo.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_z0kVBsrp65gkYg6JugK4Ow_BdQdnd6V';
+const SUPABASE_URL = 'https://SEU_PROJETO.supabase.co';
+const SUPABASE_ANON_KEY = 'SUA_ANON_KEY_AQUI';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const DEFAULT_STAGES=[
@@ -1076,6 +1097,21 @@ function fmt(n){return(+n).toFixed(2).replace('.',',')}
 function xh(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function defaultSchedule(){return DAYS.map((d,i)=>({day:i,open:i>=1&&i<=5,from:'08:00',to:'18:00'}));}
 
+/* ── Loader helpers ── */
+const _loaderStartTime = Date.now();
+function getCachedLoadingMessage(){
+  try{
+    const v = localStorage.getItem('_loading_msg');
+    return v || 'Carregando...';
+  }catch(e){return 'Carregando...';}
+}
+function hideAppLoader(){
+  const l = document.getElementById('appLoader');
+  if(!l) return;
+  l.classList.add('hide');
+  setTimeout(()=>{ l.style.display='none'; }, 500);
+}
+
 /* ── CART (única coisa em localStorage) ── */
 function loadCart(){try{const d=localStorage.getItem('_cart');if(d)S.cart=JSON.parse(d)}catch(e){}}
 function saveCart(){try{localStorage.setItem('_cart',JSON.stringify(S.cart))}catch(e){}}
@@ -1103,7 +1139,7 @@ function rowCategory(c){return{name:c.name,emoji:c.emoji||'🏷️',subcats:c.su
 
 /* ── estado global ── */
 let S={
-  store:{name:'Carregando...',desc:'',logo:'',wa:'',addr:'',phone:'',minOrder:0,deliveryFee:5,prepDefault:30,heroBanner:'',closedMessage:'',bannerImages:[],schedule:defaultSchedule(),checkoutNotice:''},
+  store:{name:'Carregando...',desc:'',logo:'',wa:'',addr:'',phone:'',minOrder:0,deliveryFee:5,prepDefault:30,heroBanner:'',closedMessage:'',bannerImages:[],schedule:defaultSchedule(),checkoutNotice:'',loadingMessage:'Carregando...'},
   categories:[],products:[],payments:[],motoboys:[],orders:[],
   kanbanStages:JSON.parse(JSON.stringify(DEFAULT_STAGES)),
   waTemplate:DEF_TMPL,paletteId:0,customColor:null,fontFamily:'inter',
@@ -1176,8 +1212,14 @@ async function sbLoad(){
       closedMessage:cfg.closed_message||'',wa:cfg.wa||'',addr:cfg.addr||'',phone:cfg.phone||'',
       minOrder:+(cfg.min_order||0),deliveryFee:+(cfg.delivery_fee||0),prepDefault:cfg.prep_default||30,
       checkoutNotice:cfg.checkout_notice||'',bannerImages:cfg.banner_images||[],
-      schedule:(cfg.schedule&&cfg.schedule.length)?cfg.schedule:defaultSchedule()
+      schedule:(cfg.schedule&&cfg.schedule.length)?cfg.schedule:defaultSchedule(),
+      loadingMessage:cfg.loading_message||'Carregando...'
     };
+    // Atualiza texto do loader com valor fresco do DB + sincroniza cache
+    const _lt = document.getElementById('loaderText');
+    if(_lt) _lt.textContent = S.store.loadingMessage || 'Carregando...';
+    try{ localStorage.setItem('_loading_msg', S.store.loadingMessage || 'Carregando...'); }catch(e){}
+
     S.waTemplate=cfg.wa_template||DEF_TMPL;
     S.paletteId=cfg.palette_id||0;
     S.fontFamily=cfg.font_family||'inter';
@@ -1218,6 +1260,10 @@ async function sbLoad(){
   renderStore();
   updateStoreOpenSwitchUI();
   subscribeToOrders();
+  // Esconde o loader com tempo mínimo total de 1.5s
+  const _elapsed = Date.now() - _loaderStartTime;
+  const _remaining = Math.max(0, 1500 - _elapsed);
+  setTimeout(hideAppLoader, _remaining);
 }
 
 async function sbSave(){
@@ -1234,7 +1280,8 @@ async function sbSave(){
       stock_warn_yellow:S.stockWarnYellow||5,stock_warn_red:S.stockWarnRed||2,
       show_cat_grid:S.showCatGrid!==false,online_mode:S.onlineMode||'auto',
       kanban_stages:S.kanbanStages,admin_tab_order:S.adminTabOrder,
-      card_fee_debit:S.cardFeeDebit||0,card_fee_credit:S.cardFeeCredit||0
+      card_fee_debit:S.cardFeeDebit||0,card_fee_credit:S.cardFeeCredit||0,
+      loading_message:S.store.loadingMessage||'Carregando...'
     };
     const {error}=await sb.from('store_config').update(payload).eq('id',1);
     if(error){console.error(error);toast('❌ '+error.message);return false;}
@@ -1435,7 +1482,7 @@ function subscribeToOrders(){
 }
 
 /* ══════════════════════════════════════════════════════════
-   TIME / THEME / STATUS
+   THEME / STATUS
    ══════════════════════════════════════════════════════════ */
 function hexToHsl(hex){let r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;const max=Math.max(r,g,b),min=Math.min(r,g,b);let h,s,l=(max+min)/2;if(max===min){h=s=0}else{const d=max-min;s=l>.5?d/(2-max-min):d/(max+min);switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4;break;}h/=6;}return[Math.round(h*360),Math.round(s*100),Math.round(l*100)];}
 function hslToHex(h,s,l){s/=100;l/=100;const a=s*Math.min(l,1-l);const f=n=>{const k=(n+h/30)%12;const color=l-a*Math.max(Math.min(k-3,9-k,1),-1);return Math.round(255*color).toString(16).padStart(2,'0')};return`#${f(0)}${f(8)}${f(4)}`;}
@@ -1460,6 +1507,15 @@ function applyFont(fontId){
   }
 }
 function saveDesign(){S.paletteId=0;S.customColor={h:_selHue,c:{}};S.fontFamily=_selectedFontFamily;applyFont(_selectedFontFamily);sbSave().then(ok=>{if(ok!==false)toast('✅ Aparência salva!')});}
+
+function saveLoadingMessage(){
+  const v = (document.getElementById('sLoadingMsg').value || '').trim() || 'Carregando...';
+  S.store.loadingMessage = v;
+  try{ localStorage.setItem('_loading_msg', v); }catch(e){}
+  const lt = document.getElementById('loaderText');
+  if(lt) lt.textContent = v;
+  sbSave().then(ok=>{ if(ok!==false) toast('✅ Mensagem salva!'); });
+}
 
 function getStoreOnlineStatus(){
   if(S.onlineMode==='manual_online')return{online:true,reason:'Forçado Online'};
@@ -1744,7 +1800,6 @@ function cartCardSurcharge(){return cartTotal()-cartTotalNoFee();}
 function applyCardFee(price,type){const pct=type==='debit'?S.cardFeeDebit:type==='credit'?S.cardFeeCredit:0;if(!pct)return price;return Math.ceil(price*(1+pct/100));}
 function getSelectedPayType(){if(!S.selPay)return '';return _payCardTypes[S.selPay]||'';}
 
-/* ── Cart drawer ── */
 function openCart(){renderCartPop();const el=document.getElementById('cartOv');el.style.display='flex';el.classList.add('open');document.body.style.overflow='hidden';}
 function closeCart(){const el=document.getElementById('cartOv');el.classList.remove('open');setTimeout(()=>{if(!el.classList.contains('open'))el.style.display='none';},300);document.body.style.overflow='';}
 function cpOut(e){if(e.target===document.getElementById('cartOv'))closeCart();}
@@ -1837,7 +1892,6 @@ async function sendWA(){
 }
 function showSucc(cb){const ov=document.getElementById('succOv');ov.style.display='flex';ov.classList.add('open');const pf=document.getElementById('progFill');pf.style.animation='none';void pf.offsetWidth;pf.style.animation='pFill 2s linear forwards';let n=3;document.getElementById('cdNum').textContent=n;const iv=setInterval(()=>{n--;document.getElementById('cdNum').textContent=n;if(n<=0){clearInterval(iv);ov.classList.remove('open');cb&&cb();}},1000);}
 
-/* ── banner carousel ── */
 let _bannerIdx=0,_bannerTimer=null;
 function renderBannerCarousel(){
   const imgs=S.store.bannerImages||[];const carousel=document.getElementById('bannerCarousel');const track=document.getElementById('bannerTrack');const dots=document.getElementById('bannerDots');
@@ -1854,7 +1908,6 @@ function bannerGoTo(i){const imgs=S.store.bannerImages||[];_bannerIdx=(i+imgs.le
 function bannerNext(){bannerGoTo(_bannerIdx+1);}
 function bannerPrev(){bannerGoTo(_bannerIdx-1);}
 
-/* ── upload imagens ── */
 function cropImage(file,targetW,targetH,cb){
   if(file.size>3*1024*1024){toast('⚠️ Imagem muito grande! Máx 3MB');return;}
   const reader=new FileReader();
@@ -1868,7 +1921,6 @@ function removeHeroBanner(){S.store.heroBanner='';renderHeader();sbSave();render
 function uploadCarouselBanners(e){const files=Array.from(e.target.files);if(!files.length)return;if(!S.store.bannerImages)S.store.bannerImages=[];let done=0;files.forEach(f=>{cropImage(f,1280,720,data=>{S.store.bannerImages.push(data);done++;if(done===files.length){renderBannerCarousel();sbSave();renderImagesTab();toast('✅ Banners salvos!');}});});e.target.value='';}
 function removeBannerImg(i){S.store.bannerImages.splice(i,1);renderBannerCarousel();sbSave();renderImagesTab();toast('🗑️ Removida!');}
 
-/* ── horários ── */
 function renderScheduleAdmin(){
   const grid=document.getElementById('scheduleGrid');if(!grid)return;
   if(!S.store.schedule||!S.store.schedule.length)S.store.schedule=defaultSchedule();
@@ -2061,7 +2113,6 @@ function openOrderDetail(orderId){
 function advanceOrderFromDetail(orderId){advanceOrder(orderId);setTimeout(()=>openOrderDetail(orderId),120);}
 function regressOrderFromDetail(orderId){regressOrder(orderId);setTimeout(()=>openOrderDetail(orderId),120);}
 
-/* ── report ── */
 function openReportModal(){
   _reportPeriod='today';
   document.getElementById('modTtl').innerHTML='📊 Relatório de Vendas';
@@ -2198,7 +2249,6 @@ function renderReport(){
   el.innerHTML=html;
 }
 
-/* ── JSON import / export ── */
 function openImportJSONModal(){
   _jsonImportMode='merge';
   document.getElementById('modTtl').innerHTML='📥 Importar Produtos via JSON';
@@ -2294,7 +2344,6 @@ async function importJSONData(){
   }catch(e){console.error(e);toast('❌ '+e.message);}
 }
 
-/* ── export ── */
 function openExportModal(){
   if(!S.products.length&&!S.categories.length){toast('⚠️ Nada para exportar!');return;}
   document.getElementById('modTtl').innerHTML='📤 Exportar Cardápio';
@@ -2330,7 +2379,6 @@ function doExport(mode){
   toast(`✅ Exportado: ${prods.length} produtos`);
 }
 
-/* ── new order modal ── */
 let _newOrderCart=[];_newOrderDelMode='pickup';
 function openNewOrderModal(){
   if(!S.products.length){toast('⚠️ Cadastre produtos primeiro!');return;}
@@ -2392,7 +2440,6 @@ async function saveNewOrder(){
   else{renderKanban();renderKanbanStats();}
 }
 
-/* ── stages ── */
 function renderStagesTab(){
   const el=document.getElementById('stagesList');if(!el)return;
   el.innerHTML=S.kanbanStages.map((s,i)=>`<div class="tab-order-item"><span class="order-num">${i+1}</span><span class="tab-label">${s.icon} ${xh(s.label)}${s.timer?' ⏱':''}${s.motoboy?' 🏍️':''}</span><div class="reorder-btns"><button class="reorder-btn" ${i===0?'disabled':''} onclick="moveStage(${i},-1)">↑</button><button class="reorder-btn" ${i===S.kanbanStages.length-1?'disabled':''} onclick="moveStage(${i},1)">↓</button><button class="reorder-btn" onclick="editStage('${s.id}')">✏️</button><button class="reorder-btn" ${S.kanbanStages.length<=2?'disabled':''} onclick="removeStage('${s.id}')">🗑️</button></div></div>`).join('');
@@ -2432,9 +2479,6 @@ async function restoreDefaultStages(){
   sbSave();renderStagesTab();renderKanban();renderKanbanStats();toast('✅ Restauradas!');
 }
 
-/* ══════════════════════════════════════════════════════════
-   ADMIN — render tabs
-   ══════════════════════════════════════════════════════════ */
 function renderDesignTab(){
   _selHue=S.customColor?S.customColor.h:350;
   _selectedFontFamily=S.fontFamily||'inter';
@@ -2448,6 +2492,8 @@ function renderDesignTab(){
     fg.innerHTML=FONT_OPTIONS.map(f=>`<div class="font-card${f.id===_selectedFontFamily?' active':''}" data-font="${f.id}" onclick="selectFont('${f.id}')"><div class="font-card-preview" style="font-family:${f.family}">Aa</div><div class="font-card-name">${f.name}</div></div>`).join('');
     FONT_OPTIONS.forEach(f=>{if(f.url&&!document.querySelector(`link[data-font="${f.id}"]`)){const link=document.createElement('link');link.rel='stylesheet';link.href=f.url;link.dataset.font=f.id;document.head.appendChild(link);}});
   }
+  const loadingEl = document.getElementById('sLoadingMsg');
+  if(loadingEl) loadingEl.value = S.store.loadingMessage || 'Carregando...';
 }
 function renderProds(){
   const el=document.getElementById('admProds');if(!el)return;
@@ -2473,7 +2519,6 @@ async function dupProd(id){
   renderProds();renderStore();toast('✅ Duplicado!');
 }
 
-/* ── modal produto ── */
 let _tmpGallery=[],_tmpVarGroups=[];
 function openProdModal(id){
   if(!S.categories.length){toast('⚠️ Crie uma categoria primeiro!');return;}
@@ -2614,7 +2659,6 @@ function renderTabOrderUI(){
 }
 function moveTab(area,idx,dir){const order=S.adminTabOrder[area];const newIdx=idx+dir;if(newIdx<0||newIdx>=order.length)return;[order[idx],order[newIdx]]=[order[newIdx],order[idx]];S.adminTabOrder[area]=order;sbSave();renderTabOrderUI();renderAdminTabs();}
 
-/* ── senha via RPC ── */
 async function savePassword(){
   const newPw=document.getElementById('sPw').value;
   const curPw=document.getElementById('sCurPw').value||'';
@@ -2675,9 +2719,6 @@ function insVar(v){const ta=document.getElementById('waTmpl'),s=ta.selectionStar
 function updWaPrev(){const t=document.getElementById('waTmpl').value;document.getElementById('waPrev').textContent=t.replace(/{{LOJA}}/g,S.store.name).replace(/{{LOJA_ENDERECO}}/g,S.store.addr||'Rua Exemplo, 123').replace(/{{LOJA_TELEFONE}}/g,S.store.phone||'(83) 99999-9999').replace(/{{NUMERO_PEDIDO}}/g,'0101').replace(/{{DATA_HORA}}/g,'01/01/2025 às 14:30').replace(/{{ITENS}}/g,'• 2x Produto Exemplo — R$ 79,98').replace(/{{NOME}}/g,'Maria Silva').replace(/{{TELEFONE}}/g,'(83) 99999-9999').replace(/{{PAGAMENTO}}/g,'💵 Dinheiro').replace(/{{TROCO_LINHA}}/g,'').replace(/{{TIPO_ENTREGA}}/g,'• (✓) Retirar\n• ( ) Entrega').replace(/{{SUBTOTAL}}/g,'R$ 79,98').replace(/{{TAXA_ENTREGA}}/g,'Grátis').replace(/{{TOTAL}}/g,'R$ 79,98').replace(/{{TROCO_RESUMO}}/g,'').replace(/{{OBS}}/g,'Nenhuma').replace(/{{LINK_LOJA}}/g,'https://sualoja.com');}
 function saveWaTmpl(){S.waTemplate=document.getElementById('waTmpl').value;sbSave().then(ok=>{if(ok!==false)toast('✅ Salvo!');});}
 
-/* ══════════════════════════════════════════════════════════
-   LOGIN (RPC)
-   ══════════════════════════════════════════════════════════ */
 async function doLogin(){
   const pw=document.getElementById('logPw').value.trim();
   if(!pw){toast('⚠️ Digite a senha!');return;}
@@ -2736,13 +2777,18 @@ function renderAdmin(){
   updateStoreOpenSwitchUI();
 }
 
-/* ── modal / toast helpers ── */
 function openMod(){const el=document.getElementById('modOv');el.style.display='flex';el.classList.add('open');document.body.style.overflow='hidden';}
 function closeMod(){const el=document.getElementById('modOv');el.classList.remove('open');document.getElementById('modBox').classList.remove('wide');setTimeout(()=>{if(!el.classList.contains('open'))el.style.display='none';},300);document.body.style.overflow='';}
 function mOut(e){if(e.target===document.getElementById('modOv'))closeMod();}
 function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2800);}
 
 /* ── boot ── */
+/* 1) Aplica mensagem em cache IMEDIATAMENTE (antes do Supabase responder) */
+(function(){
+  const lt = document.getElementById('loaderText');
+  if(lt) lt.textContent = getCachedLoadingMessage();
+})();
+
 history.replaceState({page:'pgStore',stackLen:1},'',window.location.href.split('#')[0]);
 sbLoad();
 </script>
