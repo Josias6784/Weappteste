@@ -259,6 +259,14 @@ header{background:var(--primary);color:#fff;position:sticky;top:0;z-index:200;bo
 .prog-fill{height:100%;background:linear-gradient(90deg,#25D366,#128C7E);animation:pFill 3s linear forwards}
 @keyframes pFill{from{width:0}to{width:100%}}
 
+/* ── Modal de variações (CORRIGIDO) ── */
+#varPopOv{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:450;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s;backdrop-filter:blur(4px)}
+#varPopOv.open{opacity:1;pointer-events:all}
+#varPopBox{background:var(--card-bg);border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:88vh;overflow-y:auto;transform:translateY(100%);transition:transform .3s;padding:0 0 32px}
+#varPopOv.open #varPopBox{transform:translateY(0)}
+#varPopBox::before{content:'';display:block;width:36px;height:4px;background:var(--border);border-radius:4px;margin:10px auto 4px}
+.vp-detail-link{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--primary);font-weight:700;cursor:pointer;margin-top:6px;text-decoration:underline}
+
 .adm-area-switch{display:flex;gap:8px;background:var(--card-bg);border-radius:12px;padding:6px;margin-bottom:16px;box-shadow:var(--shadow-sm)}
 .adm-area-btn{flex:1;padding:12px;border-radius:8px;border:none;background:none;font-size:13px;font-weight:800;color:var(--gray);display:flex;align-items:center;justify-content:center;gap:6px}
 .adm-area-btn.active{background:var(--primary);color:#fff;box-shadow:0 2px 8px rgba(234,29,44,.3)}
@@ -532,15 +540,27 @@ input[type=color]{border:2px solid var(--border);border-radius:12px;padding:3px;
 
 <script>
 /* ══════════════════════════════════════════════════════════
-   LOADER BOOT — independente, roda antes de tudo
-   - Esconde quando sbLoad() terminar OU hard-cap 8s
-   - Respeita mínimo de 1.5s (para não "piscar")
+   LOADER BOOT — delay configurável via localStorage
+   (o admin define em Personalização → Design → Tela de
+   carregamento; aplica no PRÓXIMO reload)
    ══════════════════════════════════════════════════════════ */
 (function(){
   window.__loaderStartTime = Date.now();
   window.__loaderHidden    = false;
-  const MIN_MS = 1500;
+
+  /* Lê delay do cache (ms). Padrão 1500. Aceita 0. */
+  function getDelay(){
+    try{
+      const raw = localStorage.getItem('_loader_delay');
+      if(raw === null) return 1500;
+      const n = parseInt(raw, 10);
+      if(isNaN(n) || n < 0) return 1500;
+      return n;
+    }catch(e){ return 1500; }
+  }
+  const MIN_MS = getDelay();
   const MAX_MS = 8000;
+  console.log('[loader] MIN_MS =', MIN_MS, 'ms');
 
   window.__hideLoader = function(){
     if(window.__loaderHidden) return;
@@ -619,11 +639,16 @@ input[type=color]{border:2px solid var(--border);border-radius:12px;padding:3px;
   <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
 </div></div>
 
-<div id="varPopOv" onclick="vpOut(event)" style="display:none"><div id="varPopBox" style="background:var(--card-bg);border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:88vh;overflow-y:auto;transform:translateY(100%);transition:transform .3s;padding:0 0 32px">
-  <div id="varPopOvInner" style="display:flex;flex-direction:column">
+<div id="varPopOv" onclick="vpOut(event)">
+  <div id="varPopBox">
     <div style="display:flex;align-items:flex-start;gap:14px;padding:14px 20px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card-bg);z-index:2">
       <div id="vpImg" style="width:68px;height:68px;border-radius:12px;background:var(--light-gray);display:flex;align-items:center;justify-content:center;font-size:26px;overflow:hidden;flex-shrink:0"></div>
-      <div style="flex:1;min-width:0"><div id="vpName" style="font-size:16px;font-weight:800;margin-bottom:6px"></div><div id="vpPrice" style="font-size:22px;font-weight:800;color:var(--primary)"></div><div id="vpPriceBase" style="font-size:11px;color:var(--gray);margin-top:2px;font-weight:600"></div></div>
+      <div style="flex:1;min-width:0">
+        <div id="vpName" style="font-size:16px;font-weight:800;margin-bottom:6px"></div>
+        <div id="vpPrice" style="font-size:22px;font-weight:800;color:var(--primary)"></div>
+        <div id="vpPriceBase" style="font-size:11px;color:var(--gray);margin-top:2px;font-weight:600"></div>
+        <div class="vp-detail-link" onclick="goDetailFromVarPop()">👁️ Ver detalhes completos</div>
+      </div>
       <button style="background:var(--light-gray);border:none;width:34px;height:34px;border-radius:50%;font-size:15px;font-weight:700" onclick="closeVarPop()">✕</button>
     </div>
     <div style="padding:18px 20px">
@@ -638,7 +663,7 @@ input[type=color]{border:2px solid var(--border);border-radius:12px;padding:3px;
       </div>
     </div>
   </div>
-</div></div>
+</div>
 
 <div id="pgStore" class="page active">
   <div id="closedBanner" class="closed-banner" style="display:none">
@@ -865,7 +890,12 @@ input[type=color]{border:2px solid var(--border);border-radius:12px;padding:3px;
             <label class="fl">Mensagem de carregamento</label>
             <input class="fi" id="sLoadingMsg" placeholder="Carregando..." maxlength="80"/>
           </div>
-          <button class="btn-primary" onclick="saveLoadingMessage()">💾 Salvar mensagem</button>
+          <div class="fg">
+            <label class="fl">Tempo mínimo do loader (ms)</label>
+            <input class="fi" id="sLoaderDelay" type="number" min="0" max="10000" step="100" placeholder="1500"/>
+            <p style="font-size:11px;color:var(--gray);margin-top:6px;line-height:1.5">Quanto tempo o spinner fica visível no mínimo antes de mostrar o conteúdo. Recomendado: <b>1500</b>. Use <b>0</b> para aparecer o mais rápido possível. A mudança vale a partir do próximo carregamento do site.</p>
+          </div>
+          <button class="btn-primary" onclick="saveLoadingSettings()">💾 Salvar configurações</button>
         </div>
         <button class="btn-primary" onclick="saveDesign()">💾 Salvar aparência</button>
       </div>
@@ -1175,7 +1205,7 @@ function rowProduct(p){return{
 function rowCategory(c){return{name:c.name,emoji:c.emoji||'🏷️',subcats:c.subcats||[],image:c.image||''};}
 
 let S={
-  store:{name:'Carregando...',desc:'',logo:'',wa:'',addr:'',phone:'',minOrder:0,deliveryFee:5,prepDefault:30,heroBanner:'',closedMessage:'',bannerImages:[],schedule:defaultSchedule(),checkoutNotice:'',loadingMessage:'Carregando...'},
+  store:{name:'Carregando...',desc:'',logo:'',wa:'',addr:'',phone:'',minOrder:0,deliveryFee:5,prepDefault:30,heroBanner:'',closedMessage:'',bannerImages:[],schedule:defaultSchedule(),checkoutNotice:'',loadingMessage:'Carregando...',loaderDelay:1500},
   categories:[],products:[],payments:[],motoboys:[],orders:[],
   kanbanStages:JSON.parse(JSON.stringify(DEFAULT_STAGES)),
   waTemplate:DEF_TMPL,paletteId:0,customColor:null,fontFamily:'inter',
@@ -1265,12 +1295,16 @@ async function sbLoad(){
       minOrder:+(cfg.min_order||0),deliveryFee:+(cfg.delivery_fee||0),prepDefault:cfg.prep_default||30,
       checkoutNotice:cfg.checkout_notice||'',bannerImages:cfg.banner_images||[],
       schedule:(cfg.schedule&&cfg.schedule.length)?cfg.schedule:defaultSchedule(),
-      loadingMessage:cfg.loading_message||'Carregando...'
+      loadingMessage:cfg.loading_message||'Carregando...',
+      loaderDelay:(typeof cfg.loader_delay==='number')?cfg.loader_delay:1500
     };
 
     const _lt=document.getElementById('loaderText');
     if(_lt) _lt.textContent = S.store.loadingMessage || 'Carregando...';
-    try{ localStorage.setItem('_loading_msg', S.store.loadingMessage || 'Carregando...'); }catch(e){}
+    try{
+      localStorage.setItem('_loading_msg', S.store.loadingMessage || 'Carregando...');
+      localStorage.setItem('_loader_delay', String(S.store.loaderDelay));
+    }catch(e){}
 
     S.waTemplate=cfg.wa_template||DEF_TMPL;
     S.paletteId=cfg.palette_id||0;
@@ -1336,7 +1370,8 @@ async function sbSave(){
       show_cat_grid:S.showCatGrid!==false,online_mode:S.onlineMode||'auto',
       kanban_stages:S.kanbanStages,admin_tab_order:S.adminTabOrder,
       card_fee_debit:S.cardFeeDebit||0,card_fee_credit:S.cardFeeCredit||0,
-      loading_message:S.store.loadingMessage||'Carregando...'
+      loading_message:S.store.loadingMessage||'Carregando...',
+      loader_delay:(typeof S.store.loaderDelay==='number')?S.store.loaderDelay:1500
     };
     const {error}=await sb.from('store_config').update(payload).eq('id',1);
     if(error){console.error(error);toast('❌ '+error.message);return false;}
@@ -1594,13 +1629,22 @@ function applyFont(fontId){
 }
 function saveDesign(){S.paletteId=0;S.customColor={h:_selHue,c:{}};S.fontFamily=_selectedFontFamily;applyFont(_selectedFontFamily);sbSave().then(ok=>{if(ok!==false)toast('✅ Aparência salva!')});}
 
-function saveLoadingMessage(){
-  const v=(document.getElementById('sLoadingMsg').value||'').trim()||'Carregando...';
-  S.store.loadingMessage=v;
-  try{ localStorage.setItem('_loading_msg',v); }catch(e){}
+function saveLoadingSettings(){
+  const msg=(document.getElementById('sLoadingMsg').value||'').trim()||'Carregando...';
+  let delay=parseInt(document.getElementById('sLoaderDelay').value);
+  if(isNaN(delay)||delay<0) delay=1500;
+  if(delay>10000) delay=10000;
+  S.store.loadingMessage=msg;
+  S.store.loaderDelay=delay;
+  try{
+    localStorage.setItem('_loading_msg',msg);
+    localStorage.setItem('_loader_delay',String(delay));
+  }catch(e){}
   const lt=document.getElementById('loaderText');
-  if(lt) lt.textContent=v;
-  sbSave().then(ok=>{ if(ok!==false) toast('✅ Mensagem salva!'); });
+  if(lt) lt.textContent=msg;
+  sbSave().then(ok=>{
+    if(ok!==false) toast('✅ Salvo! Aplicado no próximo carregamento.');
+  });
 }
 
 function getStoreOnlineStatus(){
@@ -1729,12 +1773,24 @@ function renderCatImgGrid(){
 }
 function filterCatGrid(id){if(S.currentCat===id){S.currentCat=null;S.currentSubcat=null;}else{S.currentCat=id;S.currentSubcat=null;}renderCatImgGrid();renderStore();}
 function getVarPriceRange(p){if(!p.variations||!p.variations.length)return null;const prices=[];p.variations.forEach(vg=>vg.options&&vg.options.forEach(o=>{if(o.price>0)prices.push(o.price);}));if(!prices.length)return null;const mn=Math.min(...prices),mx=Math.max(...prices);return{min:mn,max:mx,single:mn===mx};}
+
+/* Clique no card OU no "Escolher": se tem variações → abre modal; senão → vai para detalhe */
+function openProductOrDetail(id){
+  const p=S.products.find(x=>x.id===id);
+  if(!p)return;
+  if(p.variations && p.variations.length>0){
+    openVarPop(p, document.getElementById('pimg'+id));
+  } else {
+    goDetail(id);
+  }
+}
+
 function renderProductCard(p){
   const disc=p.oldPrice?Math.round((1-p.price/p.oldPrice)*100):0;
   const imgs=p.images&&p.images.length?p.images:[];
   const imgHtml=imgs[0]?`<img src="${imgs[0]}" alt="${p.name}">`:(p.emoji||'🛍️');
   const btnLabel=p.stock?(p.variations&&p.variations.length?'Escolher':'Adicionar'):'Sem estoque';
-  return `<div class="product-card" onclick="goDetail(${p.id})"><div class="pimg" id="pimg${p.id}">${imgHtml}${disc>0?`<span class="pbadge">${disc}% off</span>`:''}${!p.stock?'<div class="no-stock-ov">Sem estoque</div>':''}</div><div class="pinfo"><div class="pname">${p.name}</div>${(()=>{const vpr=getVarPriceRange(p);if(vpr){return vpr.single?'<div class="pfrom">Preço único</div>':(p.oldPrice?'<div class="pold">De R$ '+fmt(p.oldPrice)+'</div>':'');}return p.oldPrice?`<div class="pfrom">A partir de</div><div class="pold">De R$ ${fmt(p.oldPrice)}</div>`:'';})()}<div class="pprice">${(()=>{const vpr=getVarPriceRange(p);if(vpr)return vpr.single?'R$ '+fmt(vpr.min):'R$ '+fmt(vpr.min)+' – R$ '+fmt(vpr.max);return 'R$ '+fmt(p.price);})()}</div><button class="btn-ac" ${!p.stock?'disabled':''} onclick="event.stopPropagation();quickAdd(${p.id})">${btnLabel}</button></div></div>`;
+  return `<div class="product-card" onclick="openProductOrDetail(${p.id})"><div class="pimg" id="pimg${p.id}">${imgHtml}${disc>0?`<span class="pbadge">${disc}% off</span>`:''}${!p.stock?'<div class="no-stock-ov">Sem estoque</div>':''}</div><div class="pinfo"><div class="pname">${p.name}</div>${(()=>{const vpr=getVarPriceRange(p);if(vpr){return vpr.single?'<div class="pfrom">Preço único</div>':(p.oldPrice?'<div class="pold">De R$ '+fmt(p.oldPrice)+'</div>':'');}return p.oldPrice?`<div class="pfrom">A partir de</div><div class="pold">De R$ ${fmt(p.oldPrice)}</div>`:'';})()}<div class="pprice">${(()=>{const vpr=getVarPriceRange(p);if(vpr)return vpr.single?'R$ '+fmt(vpr.min):'R$ '+fmt(vpr.min)+' – R$ '+fmt(vpr.max);return 'R$ '+fmt(p.price);})()}</div><button class="btn-ac" ${!p.stock?'disabled':''} onclick="event.stopPropagation();quickAdd(${p.id})">${btnLabel}</button></div></div>`;
 }
 function renderStore(){
   renderHeader();
@@ -1764,18 +1820,31 @@ function renderStore(){
   g.innerHTML=html||'<div style="text-align:center;padding:60px 20px;color:var(--gray);font-weight:600">Nenhum produto encontrado 🔍</div>';
 }
 function fly(srcEl){const dot=document.getElementById('flyDot'),fb=document.getElementById('floatBtn');if(!fb||fb.classList.contains('hide'))return;const sr=srcEl.getBoundingClientRect(),tr=fb.getBoundingClientRect();dot.style.cssText=`display:block;left:${sr.left+sr.width/2-8}px;top:${sr.top+sr.height/2-8}px;transition:none;opacity:1;transform:scale(1)`;requestAnimationFrame(()=>requestAnimationFrame(()=>{dot.style.cssText=`display:block;left:${tr.left+tr.width/2-8}px;top:${tr.top+tr.height/2-8}px;transition:all .65s cubic-bezier(.25,1,.5,1);opacity:0;transform:scale(.3)`;}));setTimeout(()=>{dot.style.display='none'},720);setTimeout(updBadge,680);}
-function quickAdd(id){const p=S.products.find(x=>x.id===id);if(!p||!p.stock)return;if(p.variations&&p.variations.length>0){openVarPop(p,document.getElementById('pimg'+id));return;}const el=document.getElementById('pimg'+id);document.getElementById('floatBtn').classList.remove('hide');if(el)fly(el);addToCart(p,1,{});toast(`✅ ${p.name.substring(0,26)} adicionado!`);}
+function quickAdd(id){
+  const p=S.products.find(x=>x.id===id);
+  if(!p||!p.stock)return;
+  if(p.variations&&p.variations.length>0){openVarPop(p,document.getElementById('pimg'+id));return;}
+  const el=document.getElementById('pimg'+id);
+  document.getElementById('floatBtn').classList.remove('hide');
+  if(el)fly(el);
+  addToCart(p,1,{});
+  toast(`✅ ${p.name.substring(0,26)} adicionado!`);
+}
 
 let _vpProd=null,_vpQty=1,_vpSelVars={},_vpSrcEl=null;
 function openVarPop(p,srcEl){
-  document.getElementById('varPopOv').style.display='flex';
   _vpProd=p;_vpQty=1;_vpSelVars={};_vpSrcEl=srcEl;
   const imgs=p.images&&p.images.length?p.images:[];
   document.getElementById('vpImg').innerHTML=imgs[0]?`<img src="${imgs[0]}" style="width:100%;height:100%;object-fit:cover"/>`:(p.emoji||'🛍️');
   document.getElementById('vpName').textContent=p.name;
   const vprInit=getVarPriceRange(p);
-  if(vprInit){document.getElementById('vpPrice').textContent=vprInit.single?'R$ '+fmt(vprInit.min):'R$ '+fmt(vprInit.min)+' – R$ '+fmt(vprInit.max);document.getElementById('vpPriceBase').textContent='Selecione as opções';}
-  else{document.getElementById('vpPrice').textContent='R$ '+fmt(p.price);document.getElementById('vpPriceBase').textContent='';}
+  if(vprInit){
+    document.getElementById('vpPrice').textContent=vprInit.single?'R$ '+fmt(vprInit.min):'R$ '+fmt(vprInit.min)+' – R$ '+fmt(vprInit.max);
+    document.getElementById('vpPriceBase').textContent='Selecione as opções';
+  }else{
+    document.getElementById('vpPrice').textContent='R$ '+fmt(p.price);
+    document.getElementById('vpPriceBase').textContent='';
+  }
   document.getElementById('vpQtyNum').textContent=1;
   const cont=document.getElementById('vpVarSections');cont.innerHTML='';
   p.variations.forEach((vg,vi)=>{
@@ -1788,17 +1857,27 @@ function openVarPop(p,srcEl){
       btn.style.cssText='border:2px solid var(--border);border-radius:8px;padding:9px 14px;cursor:pointer;font-size:13px;font-weight:700;background:var(--card-bg);white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:5px;min-width:60px';
       if(vg.type==='color'){btn.style.width='42px';btn.style.height='42px';btn.style.borderRadius='50%';btn.style.background=opt.color||'#ccc';btn.dataset.color=opt.color||'#ccc';}
       else{const pt=opt.price>0?`<span style="font-size:10px;color:var(--primary);font-weight:800">R$ ${fmt(opt.price)}</span>`:'';btn.innerHTML=`<span style="display:flex;flex-direction:column;align-items:center;gap:1px">${opt.label}${pt}</span>`;}
-      btn.onclick=()=>{optsEl.querySelectorAll('div').forEach(b=>{b.style.borderColor='var(--border)';if(vg.type==='color'){b.style.background=b.dataset.color||'#ccc';}else{b.style.background='var(--card-bg)';}b.style.boxShadow='none';});btn.style.borderColor='var(--primary)';if(vg.type!=='color'){btn.style.background='var(--primary-light)';}btn.style.boxShadow='0 0 0 3px rgba(234,29,44,.1)';_vpSelVars[vi]={groupName:vg.name,optLabel:opt.label,optColor:opt.color,extra:opt.extra||0,price:opt.price!=null?opt.price:null};updateVpPrice();};
+      btn.onclick=()=>{
+        optsEl.querySelectorAll('div').forEach(b=>{b.style.borderColor='var(--border)';if(vg.type==='color'){b.style.background=b.dataset.color||'#ccc';}else{b.style.background='var(--card-bg)';}b.style.boxShadow='none';});
+        btn.style.borderColor='var(--primary)';
+        if(vg.type!=='color'){btn.style.background='var(--primary-light)';}
+        btn.style.boxShadow='0 0 0 3px rgba(234,29,44,.1)';
+        _vpSelVars[vi]={groupName:vg.name,optLabel:opt.label,optColor:opt.color,extra:opt.extra||0,price:opt.price!=null?opt.price:null};
+        updateVpPrice();
+      };
       optsEl.appendChild(btn);
     });
   });
   document.getElementById('varPopOv').classList.add('open');
-  document.getElementById('varPopOv').style.opacity='1';
-  document.getElementById('varPopOv').style.pointerEvents='all';
-  document.getElementById('varPopOvInner').parentElement.style.transform='translateY(0)';
   document.body.style.overflow='hidden';
 }
-function updateVpPrice(){if(!_vpProd)return;let fp=null;Object.values(_vpSelVars).forEach(v=>{if(v.price!=null&&v.price>0)fp=fp==null?v.price:Math.max(fp,v.price);});if(fp!=null){document.getElementById('vpPrice').textContent='R$ '+fmt(fp);}else{const extra=Object.values(_vpSelVars).reduce((a,v)=>a+(v.extra||0),0);document.getElementById('vpPrice').textContent='R$ '+fmt(_vpProd.price+extra);}}
+function updateVpPrice(){
+  if(!_vpProd)return;
+  let fp=null;
+  Object.values(_vpSelVars).forEach(v=>{if(v.price!=null&&v.price>0)fp=fp==null?v.price:Math.max(fp,v.price);});
+  if(fp!=null){document.getElementById('vpPrice').textContent='R$ '+fmt(fp);}
+  else{const extra=Object.values(_vpSelVars).reduce((a,v)=>a+(v.extra||0),0);document.getElementById('vpPrice').textContent='R$ '+fmt(_vpProd.price+extra);}
+}
 function vpQty(d){_vpQty=Math.max(1,_vpQty+d);document.getElementById('vpQtyNum').textContent=_vpQty;}
 function vpConfirmAdd(){
   if(!_vpProd)return;
@@ -1813,8 +1892,16 @@ function vpConfirmAdd(){
   closeVarPop();
   setTimeout(()=>{if(flyTarget)fly(flyTarget);addToCart(_vpProd,_vpQty,{vars,extra});toast(`✅ ${_vpQty}x ${_vpProd.name.substring(0,22)} adicionado!`);},120);
 }
-function closeVarPop(){const _vp=document.getElementById('varPopOv');_vp.classList.remove('open');_vp.style.opacity='0';_vp.style.pointerEvents='none';_vp.querySelector('div').style.transform='translateY(100%)';setTimeout(()=>{if(_vp.style.opacity==='0')_vp.style.display='none';},300);document.body.style.overflow='';}
+function closeVarPop(){
+  document.getElementById('varPopOv').classList.remove('open');
+  document.body.style.overflow='';
+}
 function vpOut(e){if(e.target===document.getElementById('varPopOv'))closeVarPop();}
+function goDetailFromVarPop(){
+  const p=_vpProd;
+  closeVarPop();
+  if(p)setTimeout(()=>goDetail(p.id),150);
+}
 
 function renderDetail(p){
   const imgs=p.images&&p.images.length?p.images:[];
@@ -2569,6 +2656,8 @@ function renderDesignTab(){
   }
   const loadingEl=document.getElementById('sLoadingMsg');
   if(loadingEl) loadingEl.value=S.store.loadingMessage||'Carregando...';
+  const delayEl=document.getElementById('sLoaderDelay');
+  if(delayEl) delayEl.value=(typeof S.store.loaderDelay==='number')?S.store.loaderDelay:1500;
 }
 function renderProds(){
   const el=document.getElementById('admProds');if(!el)return;
