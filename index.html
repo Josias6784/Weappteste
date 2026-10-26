@@ -516,7 +516,6 @@ input[type=color]{border:2px solid var(--border);border-radius:12px;padding:3px;
 .json-option.active .json-option-title{color:var(--primary-dark)}
 .json-model-box{background:#1A1A1A;color:#E8E8E8;border-radius:12px;padding:14px;font-family:'Courier New',monospace;font-size:11px;line-height:1.5;white-space:pre;overflow-x:auto;max-height:300px;overflow-y:auto;margin-bottom:14px}
 
-/* ── Loader de entrada ── */
 #appLoader{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;transition:opacity .45s ease}
 #appLoader.hide{opacity:0;pointer-events:none}
 .loader-spinner{width:60px;height:60px;border-radius:50%;border:4px solid var(--border);border-top-color:var(--primary);animation:appSpin .8s linear infinite}
@@ -530,6 +529,49 @@ input[type=color]{border:2px solid var(--border);border-radius:12px;padding:3px;
   <div class="loader-spinner"></div>
   <div class="loader-text" id="loaderText">Carregando...</div>
 </div>
+
+<script>
+/* ══════════════════════════════════════════════════════════
+   LOADER BOOT — DECLARADO PRIMEIRO, INDEPENDENTE DO RESTO
+   ══════════════════════════════════════════════════════════ */
+(function(){
+  window.__loaderStartTime = Date.now();
+  window.__loaderHidden = false;
+
+  window.__hideLoader = function(){
+    if(window.__loaderHidden) return;
+    window.__loaderHidden = true;
+    const l = document.getElementById('appLoader');
+    if(!l) return;
+    l.classList.add('hide');
+    setTimeout(function(){ l.style.display = 'none'; }, 500);
+  };
+
+  /* Mostra mensagem em cache instantaneamente */
+  try {
+    const cached = localStorage.getItem('_loading_msg');
+    const el = document.getElementById('loaderText');
+    if(el) el.textContent = cached || 'Carregando...';
+  } catch(e){}
+
+  /* HIDE GARANTIDO em 1.5s */
+  setTimeout(function(){ window.__hideLoader(); }, 1500);
+
+  /* HARD CAP: 5s — se algo travar demais, some */
+  setTimeout(function(){ window.__hideLoader(); }, 5000);
+
+  /* Qualquer erro global → esconde loader imediatamente */
+  window.addEventListener('error', function(e){
+    console.error('[global error]', e.message);
+    try{ window.__hideLoader(); }catch(_){}
+  });
+
+  window.addEventListener('unhandledrejection', function(e){
+    console.error('[unhandled rejection]', e.reason);
+    try{ window.__hideLoader(); }catch(_){}
+  });
+})();
+</script>
 
 <header>
   <div class="hdr-top">
@@ -743,6 +785,13 @@ input[type=color]{border:2px solid var(--border);border-radius:12px;padding:3px;
 
       <div class="adm-sec" id="tab-categories">
         <div class="atb"><button class="btn-new" onclick="openCatModal()">+ Nova categoria</button></div>
+
+        <div class="sec-card" style="margin-bottom:16px">
+          <div class="sec-ttl">📑 Ordem na vitrine</div>
+          <p style="font-size:12px;color:var(--gray);margin-bottom:12px;line-height:1.6">Use as setas ↑↓ para mudar a ordem em que as categorias aparecem na página inicial.</p>
+          <div class="tab-order-list" id="catOrderList"></div>
+        </div>
+
         <div class="il" id="admCats"></div>
       </div>
 
@@ -992,8 +1041,13 @@ input[type=color]{border:2px solid var(--border);border-radius:12px;padding:3px;
 /* ══════════════════════════════════════════════════════════
    SUPABASE — substitua pelos valores do SEU projeto
    ══════════════════════════════════════════════════════════ */
-const SUPABASE_URL = 'https://SEU_PROJETO.supabase.co';
-const SUPABASE_ANON_KEY = 'SUA_ANON_KEY_AQUI';
+const SUPABASE_URL = 'https://gmxefiznzevvaeuypbuo.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_z0kVBsrp65gkYg6JugK4Ow_BdQdnd6V';
+
+if(SUPABASE_URL.includes('SEU_PROJETO') || SUPABASE_ANON_KEY.includes('SUA_ANON_KEY')){
+  console.error('⚠️ Configure SUPABASE_URL e SUPABASE_ANON_KEY no HTML!');
+}
+
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const DEFAULT_STAGES=[
@@ -1097,36 +1151,12 @@ function fmt(n){return(+n).toFixed(2).replace('.',',')}
 function xh(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function defaultSchedule(){return DAYS.map((d,i)=>({day:i,open:i>=1&&i<=5,from:'08:00',to:'18:00'}));}
 
-/* ── Loader helpers ── */
-const _loaderStartTime = Date.now();
-function getCachedLoadingMessage(){
-  try{
-    const v = localStorage.getItem('_loading_msg');
-    return v || 'Carregando...';
-  }catch(e){return 'Carregando...';}
-}
-
-  const _loaderStartTime = Date.now();
-
-// Watchdog: se por qualquer motivo o sbLoad travar, esconde o loader em 4s
-setTimeout(()=>{
-  console.warn('[loader] watchdog disparou — escondendo forçado');
-  hideAppLoader();
-}, 4000);
-  
-function hideAppLoader(){
-  const l = document.getElementById('appLoader');
-  if(!l || l.style.display === 'none') return;
-  l.classList.add('hide');
-  setTimeout(()=>{ l.style.display='none'; }, 500);
-  }
-
 /* ── CART (única coisa em localStorage) ── */
 function loadCart(){try{const d=localStorage.getItem('_cart');if(d)S.cart=JSON.parse(d)}catch(e){}}
 function saveCart(){try{localStorage.setItem('_cart',JSON.stringify(S.cart))}catch(e){}}
 
 /* ── mappers DB ↔ app ── */
-function mapCategory(c){return{id:c.id,name:c.name,emoji:c.emoji,subcats:c.subcats||[],image:c.image||''};}
+function mapCategory(c){return{id:c.id,name:c.name,emoji:c.emoji,subcats:c.subcats||[],image:c.image||'',sortOrder:c.sort_order||0};}
 function mapProduct(p){return{id:p.id,name:p.name,desc:p.description||'',price:+(p.price||0),oldPrice:+(p.old_price||0),catId:p.cat_id,subcat:p.subcat||'',emoji:p.emoji,stock:p.stock,stockQty:p.stock_qty,prepTime:p.prep_time,images:p.images||[],variations:p.variations||[]};}
 function mapPayment(p){return{id:p.id,name:p.name,icon:p.icon,card_type:p.card_type||'none'};}
 function mapMotoboy(m){return{id:m.id,name:m.name,phone:m.phone||'',fee_type:m.fee_type||'fixed',fee_value:+(m.fee_value||0)};}
@@ -1194,7 +1224,11 @@ async function loadConfig(){
   if(error){console.error('loadConfig',error);return null;}
   return data;
 }
-async function loadCategories(){const {data}=await sb.from('categories').select('*').order('id');return(data||[]).map(mapCategory);}
+async function loadCategories(){
+  const {data,error}=await sb.from('categories').select('*').order('sort_order',{ascending:true,nullsFirst:false}).order('id');
+  if(error){console.error('loadCategories',error);return [];}
+  return(data||[]).map(mapCategory);
+}
 async function loadProducts(){const {data}=await sb.from('products').select('*').order('id');return(data||[]).map(mapProduct);}
 async function loadPayments(){const {data}=await sb.from('payments').select('*').order('id');return(data||[]).map(mapPayment);}
 async function loadMotoboys(){const {data}=await sb.from('motoboys').select('*').order('id');return(data||[]).map(mapMotoboy);}
@@ -1213,52 +1247,50 @@ async function sbLoad(){
   console.log('[sbLoad] início');
   try{
     await cleanupOldOrders();
-    console.log('[sbLoad] cleanup OK');
     const [cfg,cats,prods,pays,mbs,ords]=await Promise.all([
       loadConfig(),loadCategories(),loadProducts(),loadPayments(),loadMotoboys(),loadOrders()
     ]);
-    console.log('[sbLoad] dados carregados:',{cfg:!!cfg,cats:cats.length,prods:prods.length,ords:ords.length});
+    console.log('[sbLoad] dados:',{cfg:!!cfg,cats:cats.length,prods:prods.length,ords:ords.length});
+
     if(!cfg){
-      console.warn('[sbLoad] config ausente — usando padrões');
-      toast('⚠️ Configuração não encontrada no banco');
+      console.warn('[sbLoad] config ausente — renderizando estado de erro');
+      S.store.loadingMessage='Carregando...';
+      document.getElementById('prodGrid').innerHTML=`
+        <div style="text-align:center;padding:60px 20px;color:var(--primary)">
+          <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+          <h3 style="margin-bottom:8px;font-weight:800">Não conectou ao banco</h3>
+          <p style="font-size:13px;color:var(--gray);line-height:1.6">Verifique a URL e a chave do Supabase no código-fonte.<br>Rode o SQL de setup no painel do Supabase.</p>
+        </div>
+      `;
+      return;
     }
 
     S.store={
-      name:(cfg&&cfg.name)||'Minha Loja',
-      desc:(cfg&&cfg.description)||'',
-      logo:(cfg&&cfg.logo)||'',
-      heroBanner:(cfg&&cfg.hero_banner)||'',
-      closedMessage:(cfg&&cfg.closed_message)||'',
-      wa:(cfg&&cfg.wa)||'',
-      addr:(cfg&&cfg.addr)||'',
-      phone:(cfg&&cfg.phone)||'',
-      minOrder:+((cfg&&cfg.min_order)||0),
-      deliveryFee:+((cfg&&cfg.delivery_fee)||0),
-      prepDefault:(cfg&&cfg.prep_default)||30,
-      checkoutNotice:(cfg&&cfg.checkout_notice)||'',
-      bannerImages:(cfg&&cfg.banner_images)||[],
-      schedule:(cfg&&cfg.schedule&&cfg.schedule.length)?cfg.schedule:defaultSchedule(),
-      loadingMessage:(cfg&&cfg.loading_message)||'Carregando...'
+      name:cfg.name||'',desc:cfg.description||'',logo:cfg.logo||'',heroBanner:cfg.hero_banner||'',
+      closedMessage:cfg.closed_message||'',wa:cfg.wa||'',addr:cfg.addr||'',phone:cfg.phone||'',
+      minOrder:+(cfg.min_order||0),deliveryFee:+(cfg.delivery_fee||0),prepDefault:cfg.prep_default||30,
+      checkoutNotice:cfg.checkout_notice||'',bannerImages:cfg.banner_images||[],
+      schedule:(cfg.schedule&&cfg.schedule.length)?cfg.schedule:defaultSchedule(),
+      loadingMessage:cfg.loading_message||'Carregando...'
     };
 
-    const _lt = document.getElementById('loaderText');
+    const _lt=document.getElementById('loaderText');
     if(_lt) _lt.textContent = S.store.loadingMessage || 'Carregando...';
     try{ localStorage.setItem('_loading_msg', S.store.loadingMessage || 'Carregando...'); }catch(e){}
 
-    S.waTemplate=(cfg&&cfg.wa_template)||DEF_TMPL;
-    S.paletteId=(cfg&&cfg.palette_id)||0;
-    S.fontFamily=(cfg&&cfg.font_family)||'inter';
-    S.customColor=(cfg&&cfg.custom_color)||null;
-    S.orderN=(cfg&&cfg.order_counter)||100;
-    S.stockWarnYellow=(cfg&&cfg.stock_warn_yellow)||5;
-    S.stockWarnRed=(cfg&&cfg.stock_warn_red)||2;
-    S.showCatGrid=!cfg||cfg.show_cat_grid!==false;
-    S.onlineMode=(cfg&&cfg.online_mode)||'auto';
-    S.cardFeeDebit=+((cfg&&cfg.card_fee_debit)||0);
-    S.cardFeeCredit=+((cfg&&cfg.card_fee_credit)||0);
-    S.kanbanStages=(cfg&&cfg.kanban_stages&&cfg.kanban_stages.length)?cfg.kanban_stages:JSON.parse(JSON.stringify(DEFAULT_STAGES));
-
-    const ato=(cfg&&cfg.admin_tab_order)||{};
+    S.waTemplate=cfg.wa_template||DEF_TMPL;
+    S.paletteId=cfg.palette_id||0;
+    S.fontFamily=cfg.font_family||'inter';
+    S.customColor=cfg.custom_color||null;
+    S.orderN=cfg.order_counter||100;
+    S.stockWarnYellow=cfg.stock_warn_yellow||5;
+    S.stockWarnRed=cfg.stock_warn_red||2;
+    S.showCatGrid=cfg.show_cat_grid!==false;
+    S.onlineMode=cfg.online_mode||'auto';
+    S.cardFeeDebit=+(cfg.card_fee_debit||0);
+    S.cardFeeCredit=+(cfg.card_fee_credit||0);
+    S.kanbanStages=(cfg.kanban_stages&&cfg.kanban_stages.length)?cfg.kanban_stages:JSON.parse(JSON.stringify(DEFAULT_STAGES));
+    const ato=cfg.admin_tab_order||{};
     S.adminTabOrder={
       store:Array.isArray(ato.store)?ato.store:DEFAULT_TAB_ORDER.store.slice(),
       custom:Array.isArray(ato.custom)?ato.custom:DEFAULT_TAB_ORDER.custom.slice()
@@ -1281,22 +1313,21 @@ async function sbLoad(){
     applyFont(S.fontFamily);
     loadCart();
     S.cart=S.cart.filter(ci=>S.products.find(p=>p.id===ci.id));
-    console.log('[sbLoad] estado montado');
+    console.log('[sbLoad] estado pronto');
   }catch(e){
     console.error('[sbLoad] ERRO:',e);
-    toast('❌ '+e.message);
+    try{toast('❌ '+e.message);}catch(_){}
   }finally{
-    console.log('[sbLoad] finally — escondendo loader');
     try{_activar('pgStore');}catch(e){console.error('activar',e);}
     try{renderStore();}catch(e){console.error('renderStore',e);}
     try{updateStoreOpenSwitchUI();}catch(e){console.error('switchUI',e);}
     try{subscribeToOrders();}catch(e){console.error('subscribe',e);}
-    const _elapsed = Date.now() - _loaderStartTime;
-    const _remaining = Math.max(0, 1500 - _elapsed);
-    setTimeout(hideAppLoader, _remaining);
+    /* Se passou 1.5s e ainda não escondeu, esconde agora (o timeout de 1.5s já cuidou se for antes) */
+    const elapsed=Date.now()-window.__loaderStartTime;
+    if(elapsed>=1500){ window.__hideLoader(); }
+    console.log('[sbLoad] finally');
   }
-  }
-  
+}
 
 async function sbSave(){
   try{
@@ -1352,13 +1383,14 @@ async function sbDelProd(id){
 }
 async function sbSaveCat(data,id){
   try{
-    const row=rowCategory(data);
     if(id){
-      const {error}=await sb.from('categories').update(row).eq('id',id);
+      const {error}=await sb.from('categories').update(rowCategory(data)).eq('id',id);
       if(error)throw error;
       const c=S.categories.find(x=>x.id===id);
       if(c)Object.assign(c,data);
     }else{
+      const maxSort=S.categories.length?Math.max(...S.categories.map(c=>c.sortOrder||0))+1:0;
+      const row={...rowCategory(data),sort_order:maxSort};
       const {data:ins,error}=await sb.from('categories').insert(row).select().single();
       if(error)throw error;
       S.categories.push(mapCategory(ins));
@@ -1414,6 +1446,47 @@ async function sbDelMotoboy(id){
   S.motoboys=S.motoboys.filter(m=>m.id!==id);
   renderMotoboys();
   toast('🗑️ Excluído!');
+}
+
+/* ══════════════════════════════════════════════════════════
+   REORDENAÇÃO DE CATEGORIAS (NEW!)
+   ══════════════════════════════════════════════════════════ */
+async function moveCategoryOrder(idx, dir){
+  const newIdx=idx+dir;
+  if(newIdx<0 || newIdx>=S.categories.length) return;
+  [S.categories[idx],S.categories[newIdx]]=[S.categories[newIdx],S.categories[idx]];
+  /* Persiste a nova ordem de TODAS as categorias */
+  for(let i=0;i<S.categories.length;i++){
+    const c=S.categories[i];
+    if(c.sortOrder!==i){
+      const {error}=await sb.from('categories').update({sort_order:i}).eq('id',c.id);
+      if(error){console.error('update sort_order',error);toast('❌ '+error.message);return;}
+      c.sortOrder=i;
+    }
+  }
+  renderCatOrderList();
+  renderCats();
+  renderCatImgGrid();
+  renderStore();
+  toast('✅ Ordem salva!');
+}
+function renderCatOrderList(){
+  const el=document.getElementById('catOrderList');
+  if(!el)return;
+  if(!S.categories.length){
+    el.innerHTML='<div style="text-align:center;padding:20px;color:var(--gray);font-size:12px;font-weight:600">Nenhuma categoria ainda</div>';
+    return;
+  }
+  el.innerHTML=S.categories.map((c,i)=>`
+    <div class="tab-order-item">
+      <span class="order-num">${i+1}</span>
+      <span class="tab-label">${c.emoji||'🏷️'} ${xh(c.name)}</span>
+      <div class="reorder-btns">
+        <button class="reorder-btn" ${i===0?'disabled':''} onclick="moveCategoryOrder(${i},-1)">↑</button>
+        <button class="reorder-btn" ${i===S.categories.length-1?'disabled':''} onclick="moveCategoryOrder(${i},1)">↓</button>
+      </div>
+    </div>
+  `).join('');
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1494,23 +1567,25 @@ async function refreshKanban(){
 
 function subscribeToOrders(){
   if(_ordersChannel)return;
-  _ordersChannel=sb.channel('orders-live')
-    .on('postgres_changes',{event:'*',schema:'public',table:'orders'},payload=>{
-      try{
-        if(payload.eventType==='INSERT'){
-          if(!S.orders.find(o=>o.id===payload.new.id)){
-            S.orders.push(mapOrder(payload.new));
-            if(S.adminLogged){playNotificationSound();showOrderNotification(payload.new);}
+  try{
+    _ordersChannel=sb.channel('orders-live')
+      .on('postgres_changes',{event:'*',schema:'public',table:'orders'},payload=>{
+        try{
+          if(payload.eventType==='INSERT'){
+            if(!S.orders.find(o=>o.id===payload.new.id)){
+              S.orders.push(mapOrder(payload.new));
+              if(S.adminLogged){playNotificationSound();showOrderNotification(payload.new);}
+            }
+          }else if(payload.eventType==='UPDATE'){
+            const o=S.orders.find(o=>o.id===payload.new.id);
+            if(o)Object.assign(o,mapOrder(payload.new));
+          }else if(payload.eventType==='DELETE'){
+            S.orders=S.orders.filter(o=>o.id!==payload.old.id);
           }
-        }else if(payload.eventType==='UPDATE'){
-          const o=S.orders.find(o=>o.id===payload.new.id);
-          if(o)Object.assign(o,mapOrder(payload.new));
-        }else if(payload.eventType==='DELETE'){
-          S.orders=S.orders.filter(o=>o.id!==payload.old.id);
-        }
-        if(S.adminLogged&&S.currentAdminTab==='orders'){renderKanban();renderKanbanStats();}
-      }catch(e){console.error('realtime:',e);}
-    }).subscribe();
+          if(S.adminLogged&&S.currentAdminTab==='orders'){renderKanban();renderKanbanStats();}
+        }catch(e){console.error('realtime:',e);}
+      }).subscribe();
+  }catch(e){console.error('subscribe error',e);}
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1541,11 +1616,11 @@ function applyFont(fontId){
 function saveDesign(){S.paletteId=0;S.customColor={h:_selHue,c:{}};S.fontFamily=_selectedFontFamily;applyFont(_selectedFontFamily);sbSave().then(ok=>{if(ok!==false)toast('✅ Aparência salva!')});}
 
 function saveLoadingMessage(){
-  const v = (document.getElementById('sLoadingMsg').value || '').trim() || 'Carregando...';
-  S.store.loadingMessage = v;
-  try{ localStorage.setItem('_loading_msg', v); }catch(e){}
-  const lt = document.getElementById('loaderText');
-  if(lt) lt.textContent = v;
+  const v=(document.getElementById('sLoadingMsg').value||'').trim()||'Carregando...';
+  S.store.loadingMessage=v;
+  try{ localStorage.setItem('_loading_msg',v); }catch(e){}
+  const lt=document.getElementById('loaderText');
+  if(lt) lt.textContent=v;
   sbSave().then(ok=>{ if(ok!==false) toast('✅ Mensagem salva!'); });
 }
 
@@ -1640,10 +1715,10 @@ function handleAdminTrigger(){
    ══════════════════════════════════════════════════════════ */
 function renderHeader(){
   const s=S.store;
-  document.getElementById('pageTitle').textContent=s.name;
-  document.getElementById('hName2').textContent=s.name;
+  document.getElementById('pageTitle').textContent=s.name||'Catálogo Online';
+  document.getElementById('hName2').textContent=s.name||'Minha Loja';
   document.getElementById('hDesc').textContent=s.desc||'Bem-vindo ao nosso catálogo!';
-  document.getElementById('hBrandName').textContent=s.name;
+  document.getElementById('hBrandName').textContent=s.name||'Minha Loja';
   document.getElementById('hBrandSub').textContent=s.desc?'Catálogo Online':'Bem-vindo!';
   const lh=s.logo?`<img src="${s.logo}">`:'🛍️';
   document.getElementById('hLogo').innerHTML=lh;
@@ -1849,9 +1924,6 @@ function renderCartPop(){
 function cpQ(idx,d){S.cart[idx].qty=Math.max(0,S.cart[idx].qty+d);if(S.cart[idx].qty===0)S.cart.splice(idx,1);updBadge();saveCart();renderCartPop();}
 function cpRm(idx){S.cart.splice(idx,1);updBadge();saveCart();renderCartPop();}
 
-/* ══════════════════════════════════════════════════════════
-   CHECKOUT
-   ══════════════════════════════════════════════════════════ */
 function renderCheckout(){
   const notice=S.store.checkoutNotice||'';
   const noticeBox=document.getElementById('checkoutNoticeBox');
@@ -2351,7 +2423,8 @@ async function importJSONData(){
     for(const c of cats){
       const key=(c.name||'').toLowerCase();if(!key)continue;
       if(!catMap[key]){
-        const {data:ins,error}=await sb.from('categories').insert({name:c.name,emoji:c.emoji||'🏷️',subcats:Array.isArray(c.subcats)?c.subcats:[],image:c.image||''}).select().single();
+        const maxSort=S.categories.length?Math.max(...S.categories.map(x=>x.sortOrder||0))+1:0;
+        const {data:ins,error}=await sb.from('categories').insert({name:c.name,emoji:c.emoji||'🏷️',subcats:Array.isArray(c.subcats)?c.subcats:[],image:c.image||'',sort_order:maxSort}).select().single();
         if(error){console.error(error);continue;}
         S.categories.push(mapCategory(ins));
         catMap[key]=ins.id;
@@ -2524,8 +2597,8 @@ function renderDesignTab(){
     fg.innerHTML=FONT_OPTIONS.map(f=>`<div class="font-card${f.id===_selectedFontFamily?' active':''}" data-font="${f.id}" onclick="selectFont('${f.id}')"><div class="font-card-preview" style="font-family:${f.family}">Aa</div><div class="font-card-name">${f.name}</div></div>`).join('');
     FONT_OPTIONS.forEach(f=>{if(f.url&&!document.querySelector(`link[data-font="${f.id}"]`)){const link=document.createElement('link');link.rel='stylesheet';link.href=f.url;link.dataset.font=f.id;document.head.appendChild(link);}});
   }
-  const loadingEl = document.getElementById('sLoadingMsg');
-  if(loadingEl) loadingEl.value = S.store.loadingMessage || 'Carregando...';
+  const loadingEl=document.getElementById('sLoadingMsg');
+  if(loadingEl) loadingEl.value=S.store.loadingMessage||'Carregando...';
 }
 function renderProds(){
   const el=document.getElementById('admProds');if(!el)return;
@@ -2601,6 +2674,7 @@ function saveProd(id){
 }
 
 function renderCats(){
+  renderCatOrderList();
   const el=document.getElementById('admCats');if(!el)return;
   el.innerHTML=S.categories.map(c=>`<div class="ic"><div class="ic-img" style="font-size:32px;background:var(--primary-light)">${c.image?`<img src="${c.image}">`:c.emoji}</div><div class="ic-inf"><div class="ic-n">${c.name}</div><div class="ic-s">${S.products.filter(p=>p.catId===c.id).length} produtos · ${(c.subcats||[]).length} subs</div></div><div class="ic-act"><button class="bsm be" onclick="openCatModal(${c.id})">✏️</button><button class="bsm bd" onclick="delCat(${c.id})">🗑️</button></div></div>`).join('');
 }
@@ -2815,12 +2889,6 @@ function mOut(e){if(e.target===document.getElementById('modOv'))closeMod();}
 function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2800);}
 
 /* ── boot ── */
-/* 1) Aplica mensagem em cache IMEDIATAMENTE (antes do Supabase responder) */
-(function(){
-  const lt = document.getElementById('loaderText');
-  if(lt) lt.textContent = getCachedLoadingMessage();
-})();
-
 history.replaceState({page:'pgStore',stackLen:1},'',window.location.href.split('#')[0]);
 sbLoad();
 </script>
