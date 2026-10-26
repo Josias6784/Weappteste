@@ -1105,6 +1105,15 @@ function getCachedLoadingMessage(){
     return v || 'Carregando...';
   }catch(e){return 'Carregando...';}
 }
+
+  const _loaderStartTime = Date.now();
+
+// Watchdog: se por qualquer motivo o sbLoad travar, esconde o loader em 4s
+setTimeout(()=>{
+  console.warn('[loader] watchdog disparou — escondendo forçado');
+  hideAppLoader();
+}, 4000);
+  
 function hideAppLoader(){
   const l = document.getElementById('appLoader');
   if(!l) return;
